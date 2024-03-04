@@ -150,17 +150,17 @@ def show_folder_content(message):
     for directory in sftp_connection.listdir_attr():
         if sftp_connection.isdir(directory.filename):
             reply_markup[f'📂 {directory.filename}'] = {
-                'callback_data': f'change_directory:{directory.filename}'
+                'callback_data': f'cd:{directory.filename}'
             }
         else:
             reply_markup[f'📄 {directory.filename}'] = {
-                'callback_data': f'change_directory:{directory.filename}'
+                'callback_data': f'cd:{directory.filename}'
             }
     reply_markup['Upar Arquivos'] = {
         'callback_data': f'upload_file:{sftp_connection.pwd}'
     }
     reply_markup['Voltar'] = {
-        'callback_data': f'change_directory:{Path(sftp_connection.pwd).parent}'
+        'callback_data': f'cd:{Path(sftp_connection.pwd).parent}'
     }
     reply_markup['Desconectar'] = {'callback_data': 'disconnect'}
     bot.send_message(
@@ -208,7 +208,7 @@ def on_file(message, filenames):
         )
 
 
-@bot.callback_query_handler(func=lambda c: 'change_directory:' in c.data)
+@bot.callback_query_handler(func=lambda c: 'cd:' in c.data)
 def change_directory(callback_query):
     directory = callback_query.data.split(':')[-1]
     sftp_connection.chdir(directory)
