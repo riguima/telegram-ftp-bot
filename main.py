@@ -1,3 +1,4 @@
+import pysftp
 from sqlalchemy import select
 from telebot import TeleBot
 from telebot.util import quick_markup
@@ -7,6 +8,8 @@ from telegram_ftp_bot.database import Session
 from telegram_ftp_bot.models import Connection
 
 bot = TeleBot(config['bot_token'])
+
+sftp_connection = None
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -101,3 +104,35 @@ def show_connections(callback_query):
 @bot.callback_query_handler(func=lambda c: c.data == 'return')
 def return_to_main_menu(callback_query):
     start(callback_query.message)
+
+
+@bot.callback_query_handler(func=lambda c: c.data == 'connect')
+def connect(callback_query):
+    with Session() as session:
+        reply_markup = {}
+        for connection in session.scalars(select(Connection)).all():
+            reply_markup[connection.host] = {
+                'callback_data': f'connect:{connection.id}'
+            }
+        reply_markup['Voltar'] = {'callback_data': 'return'}
+        bot.send_message(
+            callback_query.message.chat.id,
+            'Escolha uma conexão',
+            quick_markup(reply_markup),
+        )
+
+
+@bot.callback_query_handler(func=lambda c: 'connect:' in c.data)
+def connect_action(callback_query):
+    global sftp_connection
+    with Session() as session:
+        connection_id = int(callback_query.data.split(':')[-1])
+        connection = session.get(Connection, connection_id)
+        sftp_connection = pysftp.Connection(
+            connection.host,
+            username=connection.username,
+            password=connection.password,
+        )
+        directories = sftp_connection.listdir_attr()
+        for directory in directories:
+            print(directory.filename, directory)
