@@ -17,19 +17,20 @@ sftp_connection = None
 
 @bot.message_handler(commands=['start', 'help'])
 def start(message):
-    bot.send_message(
-        message.chat.id,
-        'Escolha uma opção:',
-        reply_markup=quick_markup(
-            {
-                'Adicionar Conexão': {'callback_data': 'add_connection'},
-                'Remover Conexão': {'callback_data': 'remove_connection'},
-                'Conexões': {'callback_data': 'connections'},
-                'Acessar': {'callback_data': 'connect'},
-            },
-            row_width=1,
-        ),
-    )
+    if message.chat.username == config['username']:
+        bot.send_message(
+            message.chat.id,
+            'Escolha uma opção:',
+            reply_markup=quick_markup(
+                {
+                    'Adicionar Conexão': {'callback_data': 'add_connection'},
+                    'Remover Conexão': {'callback_data': 'remove_connection'},
+                    'Conexões': {'callback_data': 'connections'},
+                    'Acessar': {'callback_data': 'connect'},
+                },
+                row_width=1,
+            ),
+        )
 
 
 @bot.callback_query_handler(func=lambda c: c.data == 'add_connection')
