@@ -191,7 +191,7 @@ def on_file(message, filenames):
         show_folder_content(message)
         bot.delete_message(upload_message.chat.id, upload_message.message_id)
     else:
-        files_types = [message.photo, message.document, message.audio]
+        files_types = [message.photo, message.video, message.document, message.audio]
         for file in files_types:
             if file:
                 try:
