@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 
@@ -5,12 +6,16 @@ import pysftp
 from sqlalchemy import select
 from telebot import TeleBot
 from telebot.util import quick_markup
+from telethon import TelegramClient
 
 from telegram_ftp_bot.config import config
 from telegram_ftp_bot.database import Session
 from telegram_ftp_bot.models import Connection
 
 bot = TeleBot(config['bot_token'])
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 sftp_connection = None
 
@@ -184,29 +189,36 @@ def upload_file(callback_query):
 
 def on_file(message, filenames):
     if message.text == '/pronto':
-        upload_message = bot.send_message(message.chat.id, 'Upando Arquivos...')
+        upload_message = bot.send_message(
+            message.chat.id, 'Upando Arquivos...'
+        )
         for filename in filenames:
-            sftp_connection.put(f'uploads/{filename}')
-            os.remove(f'uploads/{filename}')
+            sftp_connection.put(filename)
+            os.remove(filename)
         show_folder_content(message)
         bot.delete_message(upload_message.chat.id, upload_message.message_id)
     else:
-        files_types = [message.photo, message.video, message.document, message.audio]
+        files_types = [
+            message.photo,
+            message.video,
+            message.document,
+            message.audio,
+        ]
         for file in files_types:
             if file:
-                try:
-                    file_info = bot.get_file(file.file_id)
-                except AttributeError:
-                    file_info = bot.get_file(file[-1].file_id)
-                downloaded_file = bot.download_file(file_info.file_path)
-                filename = file_info.file_path.split('/')[-1]
-                with open(f'uploads/{filename}', 'wb') as f:
-                    f.write(downloaded_file)
-                filenames.append(filename)
-                break
+                loop.run_until_complete(download_file(filenames))
         bot.register_next_step_handler(
             message, lambda m: on_file(m, filenames)
         )
+
+
+async def download_file(filenames):
+    async with TelegramClient(
+        'anon', config['api_id'], config['api_hash']
+    ) as client:
+        file_message = await client.get_messages(config['bot_name'], limit=1)
+        filename = await file_message[0].download_media()
+        filenames.append(filename)
 
 
 @bot.callback_query_handler(func=lambda c: 'cd:' in c.data)
