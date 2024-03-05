@@ -197,45 +197,53 @@ def on_file(message):
     ]
     for file in files_types:
         if file:
-            filename = loop.run_until_complete(download_file(message))
+            filenames = loop.run_until_complete(download_file(message))
             upload_message = bot.send_message(
                 message.chat.id, 'Upando Arquivo(s)...'
             )
-            previous_current = 0
-            progress_bar = tqdm(
-                total=os.stat(filename).st_size, unit='B', unit_scale=True
-            )
-            message_for_edit = bot.send_message(message.chat.id, 'Progresso')
-            sftp_connection.put(filename, callback=lambda c, t: update_progress_bar(c, t, message_for_edit, progress_bar))
-            os.remove(filename)
+            for filename in filenames:
+                previous_current = 0
+                progress_bar = tqdm(
+                    total=os.stat(filename).st_size, unit='B', unit_scale=True
+                )
+                message_for_edit = bot.send_message(message.chat.id, f'{filename}\n')
+                sftp_connection.put(filename, callback=lambda c, t: update_progress_bar(c, t, message_for_edit, progress_bar))
+                os.remove(filename)
             show_folder_content(message)
             bot.delete_message(upload_message.chat.id, upload_message.message_id)
 
 
 async def download_file(message):
     global previous_current
-    previous_current = 0
     async with TelegramClient(
         'anon', config['api_id'], config['api_hash']
     ) as client:
-        file_message = await client.get_messages(config['bot_name'], limit=1)
-        progress_bar = tqdm(
-            total=file_message[0].file.size, unit='B', unit_scale=True
-        )
-        message_for_edit = bot.send_message(message.chat.id, 'Progresso')
-        filename = await file_message[0].download_media(
-            progress_callback=lambda c, t: update_progress_bar(
-                c, t, message_for_edit, progress_bar
-            )
-        )
-        return filename
+        file_messages = await client.get_messages(config['bot_name'], limit=100)
+        filenames = []
+        for file_message in file_messages:
+            if file_message.media:
+                previous_current = 0
+                progress_bar = tqdm(
+                    total=file_message.file.size, unit='B', unit_scale=True
+                )
+                message_for_edit = bot.send_message(message.chat.id, f'{file_message.file.name}\n')
+                filename = await file_message.download_media(
+                    progress_callback=lambda c, t: update_progress_bar(
+                        c, t, message_for_edit, progress_bar
+                    )
+                )
+                filenames.append(filename)
+            else:
+                break
+    return filenames
 
 
 def update_progress_bar(current, total, message_for_edit, progress_bar):
     global previous_current
     progress_bar.update(current - previous_current)
+    filename = message_for_edit.text.split('\n')[0]
     bot.edit_message_text(
-        f'`Progresso: {progress_bar}`',
+        f'`{filename}\n{progress_bar}`',
         message_for_edit.chat.id,
         message_for_edit.message_id,
         parse_mode='MarkdownV2',
