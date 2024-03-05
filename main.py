@@ -18,6 +18,8 @@ bot = TeleBot(config['bot_token'])
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
+previous_current = 0
+
 sftp_connection = None
 
 
@@ -186,6 +188,7 @@ def upload_file(callback_query):
 
 
 def on_file(message):
+    global previous_current
     files_types = [
         message.photo,
         message.video,
@@ -198,13 +201,20 @@ def on_file(message):
             upload_message = bot.send_message(
                 message.chat.id, 'Upando Arquivo(s)...'
             )
-            sftp_connection.put(filename)
+            previous_current = 0
+            progress_bar = tqdm(
+                total=os.stat(filename).st_size, unit='B', unit_scale=True
+            )
+            message_for_edit = bot.send_message(message.chat.id, 'Progresso')
+            sftp_connection.put(filename, callback=lambda c, t: update_progress_bar(c, t, message_for_edit, progress_bar))
             os.remove(filename)
             show_folder_content(message)
             bot.delete_message(upload_message.chat.id, upload_message.message_id)
 
 
 async def download_file(message):
+    global previous_current
+    previous_current = 0
     async with TelegramClient(
         'anon', config['api_id'], config['api_hash']
     ) as client:
@@ -215,21 +225,21 @@ async def download_file(message):
         message_for_edit = bot.send_message(message.chat.id, 'Progresso')
         filename = await file_message[0].download_media(
             progress_callback=lambda c, t: update_progress_bar(
-                c, t, message, message_for_edit, progress_bar
+                c, t, message_for_edit, progress_bar
             )
         )
         return filename
 
 
-def update_progress_bar(
-    current, total, message, message_for_edit, progress_bar
-):
-    progress_bar.update(current)
+def update_progress_bar(current, total, message_for_edit, progress_bar):
+    global previous_current
+    progress_bar.update(current - previous_current)
     bot.edit_message_text(
         f'Progresso: {progress_bar}',
         message_for_edit.chat.id,
         message_for_edit.message_id,
     )
+    previous_current = current
 
 
 @bot.callback_query_handler(func=lambda c: 'cd:' in c.data)
