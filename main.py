@@ -235,9 +235,10 @@ def update_progress_bar(current, total, message_for_edit, progress_bar):
     global previous_current
     progress_bar.update(current - previous_current)
     bot.edit_message_text(
-        f'Progresso: {progress_bar}',
+        f'`Progresso: {progress_bar}`',
         message_for_edit.chat.id,
         message_for_edit.message_id,
+        parse_mode='MarkdownV2',
     )
     previous_current = current
 
