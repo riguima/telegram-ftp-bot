@@ -7,6 +7,7 @@ from sqlalchemy import select
 from telebot import TeleBot
 from telebot.util import quick_markup
 from telethon import TelegramClient
+from tqdm import tqdm
 
 from telegram_ftp_bot.config import config
 from telegram_ftp_bot.database import Session
@@ -178,47 +179,57 @@ def show_folder_content(message):
 
 @bot.callback_query_handler(func=lambda c: 'upload_file:' in c.data)
 def upload_file(callback_query):
-    bot.send_message(
-        callback_query.message.chat.id,
-        'Envie quantos arquivos quiser, digite /pronto para finalizar',
-    )
+    bot.send_message(callback_query.message.chat.id, 'Envie o(s) arquivo(s) para upload')
     bot.register_next_step_handler(
-        callback_query.message, lambda m: on_file(m, [])
+        callback_query.message, on_file
     )
 
 
-def on_file(message, filenames):
-    if message.text == '/pronto':
-        upload_message = bot.send_message(
-            message.chat.id, 'Upando Arquivos...'
-        )
-        for filename in filenames:
+def on_file(message):
+    files_types = [
+        message.photo,
+        message.video,
+        message.document,
+        message.audio,
+    ]
+    for file in files_types:
+        if file:
+            filename = loop.run_until_complete(download_file(message))
+            upload_message = bot.send_message(
+                message.chat.id, 'Upando Arquivo(s)...'
+            )
             sftp_connection.put(filename)
             os.remove(filename)
-        show_folder_content(message)
-        bot.delete_message(upload_message.chat.id, upload_message.message_id)
-    else:
-        files_types = [
-            message.photo,
-            message.video,
-            message.document,
-            message.audio,
-        ]
-        for file in files_types:
-            if file:
-                loop.run_until_complete(download_file(filenames))
-        bot.register_next_step_handler(
-            message, lambda m: on_file(m, filenames)
-        )
+            show_folder_content(message)
+            bot.delete_message(upload_message.chat.id, upload_message.message_id)
 
 
-async def download_file(filenames):
+async def download_file(message):
     async with TelegramClient(
         'anon', config['api_id'], config['api_hash']
     ) as client:
         file_message = await client.get_messages(config['bot_name'], limit=1)
-        filename = await file_message[0].download_media()
-        filenames.append(filename)
+        progress_bar = tqdm(
+            total=file_message[0].file.size, unit='B', unit_scale=True
+        )
+        message_for_edit = bot.send_message(message.chat.id, 'Progresso')
+        filename = await file_message[0].download_media(
+            progress_callback=lambda c, t: update_progress_bar(
+                c, t, message, message_for_edit, progress_bar
+            )
+        )
+        return filename
+
+
+def update_progress_bar(
+    current, total, message, message_for_edit, progress_bar
+):
+    progress_bar.update(current)
+    bot.edit_message_text(
+        f'Progresso: {progress_bar}',
+        message_for_edit.chat.id,
+        message_for_edit.message_id,
+    )
 
 
 @bot.callback_query_handler(func=lambda c: 'cd:' in c.data)
